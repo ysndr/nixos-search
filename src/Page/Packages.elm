@@ -37,6 +37,7 @@ import Html.Attributes
         , href
         , id
         , target
+        , type_
         )
 import Html.Events exposing (onClick)
 import Http exposing (Body)
@@ -72,7 +73,7 @@ type alias ResultItemSource =
     , hydra : Maybe (List ResultPackageHydra)
     , flakeName : Maybe String
     , flakeDescription : Maybe String
-    , flake_url : Maybe String
+    , flakeUrl : Maybe String
     }
 
 
@@ -346,23 +347,7 @@ viewResultItem channel showNixOSDetails show item =
 
         shortPackageDetails =
             ul []
-                ((item.source.position
-                    |> Maybe.map
-                        (\position ->
-                            case Search.channelDetailsFromId channel of
-                                Nothing ->
-                                    []
-
-                                Just channelDetails ->
-                                    [ li [ trapClick ]
-                                        [ createShortDetailsItem
-                                            "Source"
-                                            (createGithubUrl channelDetails.branch position)
-                                        ]
-                                    ]
-                        )
-                    |> Maybe.withDefault []
-                 )
+                (renderSource item channel trapClick createShortDetailsItem createGithubUrl
                     |> List.append
                         (item.source.homepage
                             |> List.head
@@ -420,7 +405,7 @@ viewResultItem channel showNixOSDetails show item =
                             Nothing ->
                                 "#"
                     ]
-                    [ text <| Maybe.withDefault "" maintainer.name ++ " <" ++ Maybe.withDefault "" maintainer.email ++ ">" ]
+                    [ text <| Maybe.withDefault "" maintainer.name ++ (Maybe.withDefault "" <| Maybe.map (\email -> " <" ++ email ++ ">") maintainer.email) ]
                 ]
 
         showPlatform platform =
@@ -571,6 +556,42 @@ viewResultItem channel showNixOSDetails show item =
                 , Search.showMoreButton toggle isOpen
                 ]
         )
+
+
+renderSource : Search.ResultItem ResultItemSource -> String -> Html.Attribute Msg -> (String -> String -> Html Msg) -> (String -> String -> String) -> List (Html Msg)
+renderSource item channel trapClick createShortDetailsItem createGithubUrl =
+    let
+        postion =
+            item.source.position
+                |> Maybe.map
+                    (\position ->
+                        case Search.channelDetailsFromId channel of
+                            Nothing ->
+                                []
+
+                            Just channelDetails ->
+                                [ li [ trapClick ]
+                                    [ createShortDetailsItem
+                                        "Source"
+                                        (createGithubUrl channelDetails.branch position)
+                                    ]
+                                ]
+                    )
+
+        flakeDef =
+            Maybe.map2
+                (\name resolved ->
+                    [ li [ trapClick ]
+                        [ createShortDetailsItem
+                            ("Flake: " ++ name)
+                            resolved
+                        ]
+                    ]
+                )
+                item.source.flakeName
+                item.source.flakeUrl
+    in
+    Maybe.withDefault (Maybe.withDefault [] flakeDef) postion
 
 
 
@@ -727,8 +748,8 @@ decodeResolvedFlake =
         resolved =
             Json.Decode.succeed ResolvedFlake
                 |> Json.Decode.Pipeline.required "type" Json.Decode.string
-                |> Json.Decode.Pipeline.optional "repo" (Json.Decode.map Just Json.Decode.string) Nothing
                 |> Json.Decode.Pipeline.optional "owner" (Json.Decode.map Just Json.Decode.string) Nothing
+                |> Json.Decode.Pipeline.optional "repo" (Json.Decode.map Just Json.Decode.string) Nothing
                 |> Json.Decode.Pipeline.optional "url" (Json.Decode.map Just Json.Decode.string) Nothing
     in
     Json.Decode.map
@@ -788,7 +809,13 @@ decodeResultPackageLicense =
 decodeResultPackageMaintainer : Json.Decode.Decoder ResultPackageMaintainer
 decodeResultPackageMaintainer =
     Json.Decode.map3 ResultPackageMaintainer
-        (Json.Decode.field "name" (Json.Decode.nullable Json.Decode.string))
+        (Json.Decode.oneOf
+            [ Json.Decode.field "name" (Json.Decode.map Just Json.Decode.string)
+            , Json.Decode.field "email" (Json.Decode.map Just Json.Decode.string)
+            , Json.Decode.field "github" (Json.Decode.map Just Json.Decode.string)
+            , Json.Decode.succeed Nothing
+            ]
+        )
         (Json.Decode.field "email" (Json.Decode.nullable Json.Decode.string))
         (Json.Decode.field "github" (Json.Decode.nullable Json.Decode.string))
 
