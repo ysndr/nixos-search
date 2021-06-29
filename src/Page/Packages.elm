@@ -208,6 +208,7 @@ view model =
         viewSuccess
         viewBuckets
         SearchMsg
+        []
 
 
 viewBuckets :
