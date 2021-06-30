@@ -48,6 +48,7 @@ import Regex
 import Route exposing (SearchType)
 import Search
 import Utils
+import Search exposing (decodeResolvedFlake)
 
 
 
@@ -737,53 +738,6 @@ decodeResultItemSource =
         |> Json.Decode.Pipeline.optional "flake_name" (Json.Decode.map Just Json.Decode.string) Nothing
         |> Json.Decode.Pipeline.optional "flake_description" (Json.Decode.map Just Json.Decode.string) Nothing
         |> Json.Decode.Pipeline.optional "flake_resolved" (Json.Decode.map Just decodeResolvedFlake) Nothing
-
-
-type alias ResolvedFlake =
-    { type_ : String, owner : Maybe String, repo : Maybe String, url : Maybe String }
-
-
-decodeResolvedFlake : Json.Decode.Decoder String
-decodeResolvedFlake =
-    let
-        resolved =
-            Json.Decode.succeed ResolvedFlake
-                |> Json.Decode.Pipeline.required "type" Json.Decode.string
-                |> Json.Decode.Pipeline.optional "owner" (Json.Decode.map Just Json.Decode.string) Nothing
-                |> Json.Decode.Pipeline.optional "repo" (Json.Decode.map Just Json.Decode.string) Nothing
-                |> Json.Decode.Pipeline.optional "url" (Json.Decode.map Just Json.Decode.string) Nothing
-    in
-    Json.Decode.map
-        (\resolved_ ->
-            let
-                repoPath =
-                    case ( resolved_.owner, resolved_.repo ) of
-                        ( Just owner, Just repo ) ->
-                            Just <| owner ++ "/" ++ repo
-
-                        _ ->
-                            Nothing
-
-                url =
-                    resolved_.url
-
-                result =
-                    case resolved_.type_ of
-                        "github" ->
-                            Maybe.map (\repoPath_ -> "https://github.com/" ++ repoPath_) repoPath
-
-                        "gitlab" ->
-                            Maybe.map (\repoPath_ -> "https://gitlab.com/" ++ repoPath_) repoPath
-
-                        "git" ->
-                            url
-
-                        _ ->
-                            Nothing
-            in
-            Maybe.withDefault "INVALID FLAKE ORIGIN" result
-        )
-        resolved
 
 
 decodeHomepage : Json.Decode.Decoder (List String)
